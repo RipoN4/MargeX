@@ -1,0 +1,114 @@
+{
+  "name": "margex",
+  "version": "1.0.0",
+  "author": "MargeX Studio",
+  "description": "MargeX - Desktop Video & Image Merger/Converter with Edge-to-Edge Fill and NVIDIA NVENC",
+  "main": "dist-electron/main.cjs",
+  "scripts": {
+    "build:electron": "esbuild electron/main.ts electron/preload.ts --bundle --platform=node --external:electron --format=cjs --outdir=dist-electron --out-extension:.js=.cjs",
+    "dev:vite": "vite",
+    "dev:electron": "wait-on tcp:5173 && cross-env VITE_DEV_SERVER_URL=http://localhost:5173 electron .",
+    "dev": "npm run build:electron && concurrently -k \"npm run dev:vite\" \"npm run dev:electron\"",
+    "build": "vite build && npm run build:electron",
+    "dist:win": "npm run build && electron-builder --win",
+    "dist:mac": "npm run build && electron-builder --mac",
+    "dist:linux": "npm run build && electron-builder --linux",
+    "start": "npm run build && electron ."
+  },
+  "build": {
+    "appId": "com.margex.studio",
+    "productName": "MargeX",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "dist/**/*",
+      "dist-electron/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "resources/bin",
+        "to": "bin",
+        "filter": [
+          "ffmpeg*",
+          "ffprobe*"
+        ]
+      }
+    ],
+    "win": {
+      "icon": "build/icon.ico",
+      "signAndEditExecutable": false,
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "mac": {
+      "icon": "build/icon.png",
+      "category": "public.app-category.video",
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64"
+          ]
+        }
+      ]
+    },
+    "linux": {
+      "icon": "build/icon.png",
+      "category": "AudioVideo",
+      "target": [
+        {
+          "target": "AppImage",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "MargeX"
+    },
+    "portable": {
+      "artifactName": "MargeX-${version}-Portable.exe"
+    }
+  },
+  "dependencies": {
+    "lucide-react": "^0.468.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.4",
+    "autoprefixer": "^10.4.20",
+    "concurrently": "^9.1.0",
+    "cross-env": "^7.0.3",
+    "electron": "^33.2.1",
+    "electron-builder": "^25.1.8",
+    "esbuild": "^0.24.0",
+    "postcss": "^8.4.49",
+    "tailwindcss": "^3.4.15",
+    "typescript": "^5.6.3",
+    "vite": "^5.4.11",
+    "wait-on": "^8.0.1"
+  }
+}
