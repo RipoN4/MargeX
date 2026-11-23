@@ -1,0 +1,108 @@
+name: Build and Release Multi-OS
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag name (e.g. v1.0.0)'
+        required: true
+        default: 'v1.0.0'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build ${{ matrix.os_name }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os_name: Windows
+            runner: windows-latest
+            platform: win
+          - os_name: macOS
+            runner: macos-latest
+            platform: mac
+          - os_name: Linux
+            runner: ubuntu-latest
+            platform: linux
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Generate application icon
+        run: node scripts/make-icon.mjs build
+
+      - name: Bundle FFmpeg and FFprobe (Windows)
+        if: matrix.platform == 'win'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path "resources/bin" | Out-Null
+          Invoke-WebRequest -Uri "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip" -OutFile "ffmpeg-win.zip"
+          Expand-Archive -Path "ffmpeg-win.zip" -DestinationPath "ffmpeg-win" -Force
+          $binDir = (Get-ChildItem -Path "ffmpeg-win" -Recurse -Filter "ffmpeg.exe" | Select-Object -First 1).DirectoryName
+          Copy-Item "$binDir/ffmpeg.exe" "resources/bin/ffmpeg.exe"
+          Copy-Item "$binDir/ffprobe.exe" "resources/bin/ffprobe.exe"
+          Remove-Item -Recurse -Force "ffmpeg-win.zip", "ffmpeg-win"
+
+      - name: Bundle FFmpeg and FFprobe (Linux)
+        if: matrix.platform == 'linux'
+        run: |
+          mkdir -p resources/bin
+          curl -L -o ffmpeg-linux.tar.xz "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-linux64-gpl.tar.xz"
+          mkdir -p ffmpeg-linux
+          tar -xf ffmpeg-linux.tar.xz -C ffmpeg-linux --strip-components=1
+          cp ffmpeg-linux/bin/ffmpeg resources/bin/ffmpeg
+          cp ffmpeg-linux/bin/ffprobe resources/bin/ffprobe
+          chmod +x resources/bin/ffmpeg resources/bin/ffprobe
+          rm -rf ffmpeg-linux.tar.xz ffmpeg-linux
+
+      - name: Bundle FFmpeg and FFprobe (macOS)
+        if: matrix.platform == 'mac'
+        run: |
+          mkdir -p resources/bin
+          npm install --no-save ffmpeg-static ffprobe-static
+          node -e "const fs=require('fs'); const ff=require('ffmpeg-static'); const fp=require('ffprobe-static').path; fs.copyFileSync(ff,'resources/bin/ffmpeg'); fs.copyFileSync(fp,'resources/bin/ffprobe'); fs.chmodSync('resources/bin/ffmpeg',0o755); fs.chmodSync('resources/bin/ffprobe',0o755);"
+
+      - name: Build Windows executables (.exe)
+        if: matrix.platform == 'win'
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+        run: npm run dist:win
+
+      - name: Build macOS disk image (.dmg)
+        if: matrix.platform == 'mac'
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+        run: npm run dist:mac
+
+      - name: Build Linux AppImage (.AppImage)
+        if: matrix.platform == 'linux'
+        run: npm run dist:linux
+
+      - name: Upload Release Assets
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+          name: MargeX ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+          generate_release_notes: true
+          files: |
+            release/*.exe
+            release/*.dmg
+            release/*.AppImage
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
